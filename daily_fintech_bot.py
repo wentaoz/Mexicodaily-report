@@ -24,20 +24,37 @@ SEARCH_KEYWORDS = [
 def search_web():
     print("🔍 [1/3] 正在搜索墨西哥市场情报...")
     results = []
+    
     # 使用 DuckDuckGo 搜索
+    # 尝试使用 html 后端，它对 GitHub 服务器 IP 更友好
     try:
         with DDGS() as ddgs:
             for keyword in SEARCH_KEYWORDS:
                 print(f"   -> 搜索: {keyword}")
-                # 每次只取最新的 2 条，避免信息过载
-                keywords_results = list(ddgs.text(keyword, max_results=2))
-                for r in keywords_results:
-                    results.append(f"【来源: {r['title']}】\n内容: {r['body']}\n链接: {r['href']}")
+                try:
+                    # backend="html" 是关键，专治 IP 被墙
+                    keywords_results = list(ddgs.text(keyword, max_results=2, backend="html"))
+                    
+                    if not keywords_results:
+                        print(f"      ⚠️ 关键词 '{keyword}' 未返回结果 (可能是反爬虫)")
+                        continue
+
+                    for r in keywords_results:
+                        results.append(f"【来源: {r['title']}】\n内容: {r['body']}\n链接: {r['href']}")
+                        
+                except Exception as e:
+                    print(f"      ❌ 单个关键词搜索失败: {e}")
+                    
     except Exception as e:
-        print(f"❌ 搜索出错: {e}")
-        # 如果搜索挂了，返回空，后面会处理
+        print(f"❌ 搜索组件严重错误: {e}")
+    
+    # 如果实在搜不到，返回一个硬编码的提示，防止 AI 瞎编
+    if not results:
+        print("❌ 所有搜索均失败，可能是 GitHub IP 被完全封锁。")
+        return ""
     
     return "\n\n".join(results)
+
 
 def analyze_with_deepseek(raw_data):
     if not raw_data:
