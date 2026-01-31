@@ -1,8 +1,9 @@
-name: Tavily Fintech Bot
+name: Tavily Fintech Bot (Mon & Thu)
 
 on:
   schedule:
-    - cron: '0 1 * * *'
+    # 0 1 * * 1,4 代表：每周一(1)和周四(4)的 01:00 UTC 运行
+    - cron: '0 1 * * 1,4'
   workflow_dispatch:
 
 jobs:
@@ -18,13 +19,11 @@ jobs:
           python-version: '3.9'
 
       - name: Install dependencies
-        # ✅ 关键：安装 tavily-python 和 openai
         run: pip install requests openai tavily-python
 
       - name: Run Script
         env:
           DINGTALK_WEBHOOK: ${{ secrets.DINGTALK_WEBHOOK }}
           LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
-          # ✅ 确保您在 GitHub Secrets 里填了 TAVILY_API_KEY
           TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
         run: python daily_fintech_bot.py
