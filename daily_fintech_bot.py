@@ -12,26 +12,36 @@ LLM_BASE_URL = os.getenv("LLM_BASE_URL", "https://api.deepseek.com")
 LLM_MODEL_NAME = os.getenv("LLM_MODEL_NAME", "deepseek-chat")
 TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
 
-# 获取当前月份，例如 "February 2026"
+# --- 智能时间窗口计算 (去重核心逻辑) ---
+def get_search_window():
+    """
+    根据今天是周几，决定回溯几天，防止内容重复。
+    周一运行 -> 回溯 4 天 (覆盖上周四到周日)
+    周四运行 -> 回溯 3 天 (覆盖周一到周三)
+    其他时间(手动运行) -> 默认回溯 7 天
+    """
+    today_weekday = datetime.datetime.today().weekday() # 0是周一, 3是周四
+    
+    if today_weekday == 0: # Monday
+        return 4
+    elif today_weekday == 3: # Thursday
+        return 3
+    else:
+        return 7 # 手动测试时，看一周
+
+days_back = get_search_window()
 current_month = datetime.date.today().strftime("%B %Y")
 
-# --- 🎯 广角搜索关键词 ---
+# --- 关键词策略 ---
 SEARCH_QUERIES = [
-    # 1. 💰 利率与收益 (最核心竞争点)
-    f"Nu Mexico vs Klar vs Ualá tasas de rendimiento {current_month}",
-    
-    # 2. 🚗 滴滴 (DiDi) 专项监测
-    f"DiDi Card México tarjeta crédito beneficios y opiniones {current_month}",
-    
-    # 3. 💳 竞品对比与吐槽 (找用户真实痛点)
-    f"RappiCard vs Stori vs Nu comentarios quejas usuarios {current_month}",
-    
-    # 4. ⚖️ 监管与大盘
+    f"Nu Mexico vs Klar vs Ualá tasas de rendimiento updates {current_month}",
+    f"DiDi Card México beneficios y opiniones recientes",
+    f"RappiCard vs Stori comentarios quejas usuarios",
     "CNBV regulación fintech México noticias recientes"
 ]
 
 def search_with_tavily():
-    print("🔍 [1/3] 正在调用 Tavily 全网搜索...")
+    print(f"🔍 [1/3] 正在执行智能搜索 (回溯过去 {days_back} 天)...")
     if not TAVILY_API_KEY:
         return "❌ 错误：未设置 TAVILY_API_KEY"
 
@@ -41,21 +51,19 @@ def search_with_tavily():
     for query in SEARCH_QUERIES:
         print(f"   -> 搜索: {query}")
         try:
-            # 关键参数调整：
-            # topic="general": 包含博客、论坛、官网 (比 news 数据更多)
-            # days=30: 只要是本月的内容都算
+            # ✅ 关键点：days 参数是动态的
             response = tavily.search(
                 query=query,
                 search_depth="advanced",
                 topic="general", 
-                days=30,
+                days=days_back, # 动态时间，天然去重
                 max_results=2
             )
             
             for res in response.get('results', []):
                 # 过滤掉太短的内容
                 if len(res['content']) > 50:
-                    combined_results.append(f"【话题: {query}】\n标题: {res['title']}\n摘要: {res['content']}\n链接: {res['url']}")
+                    combined_results.append(f"【来源: {res['title']}】\n内容: {res['content']}\n链接: {res['url']}")
         
         except Exception as e:
             print(f"      ❌ Tavily 搜索异常: {e}")
@@ -64,29 +72,30 @@ def search_with_tavily():
 
 def analyze_with_deepseek(raw_data):
     if not raw_data:
-        return "⚠️ Tavily 未搜索到数据，请检查 Key 或关键词设置。"
+        return f"⚠️ 过去 {days_back} 天内，市场无关于 Nu/DiDi/Rappi 的重大更新。"
 
-    print("🧠 [2/3] 正在呼叫 DeepSeek 进行分析...")
+    print("🧠 [2/3] 正在呼叫 DeepSeek 进行差异化分析...")
     
     client = OpenAI(api_key=LLM_API_KEY, base_url=LLM_BASE_URL)
 
     prompt = f"""
-    你是一位专注于拉美市场的 Fintech 产品经理。
-    请根据以下【Tavily 搜索到的全网数据】，写一份**墨西哥市场竞品日报**。
+    你是一位墨西哥 Fintech 产品经理。
+    这是**过去 {days_back} 天**（自上次播报以来）的最新市场情报。
+    
+    请根据这些信息写一份简报。
 
     【搜索数据】：
     {raw_data}
 
     【撰写要求】：
-    1. **核心竞品**：重点关注 **Nu, DiDi (滴滴), Rappi, Stori**。
-    2. **不仅是新闻**：请从搜索结果中提炼**“用户正在讨论什么”**（例如：谁家额度高？谁家客服烂？谁家利息涨了？）。
-    3. **板块划分** (Markdown)：
-       - **🔥 市场热点** (Yield Wars/监管)
-       - **🚀 竞品动态** (DiDi/Nu/Rappi 功能或营销)
-       - **🗣 用户舆情** (真实口碑与吐槽 - 重点)
-    4. **来源**：必须附带链接。
+    1. **去重检查**：只关注最近几天的新变化。如果是老生常谈的信息（例如去年的旧闻），请直接忽略。
+    2. **如果没有新动态**：请明确回复“本周期内（近{days_back}天）核心竞品无重大费率或功能调整”。
+    3. **核心关注**：
+       - **Nu/DiDi/Rappi** 的费率(Yield)是否有微调？
+       - 社交媒体上是否有突发的**集中投诉**？
+    4. **格式**：Markdown。
 
-    请直接输出报告：
+    请输出报告：
     """
 
     try:
@@ -109,16 +118,13 @@ def send_dingtalk(content):
     data = {
         "msgtype": "markdown",
         "markdown": {
-            "title": "墨西哥Fintech日报",
-            "text": f"### 🌮 墨西哥 Fintech 竞品监测\n\n{content}"
+            "title": "墨西哥Fintech半周报",
+            "text": f"### 🌮 墨西哥 Fintech 半周报 ({datetime.date.today()})\n*覆盖周期：过去 {days_back} 天*\n\n{content}"
         }
     }
     requests.post(DINGTALK_WEBHOOK, headers=headers, data=json.dumps(data))
 
 if __name__ == "__main__":
     raw_news = search_with_tavily()
-    # 简单的 Debug，看看搜到了多少字
-    print(f"📊 搜集到原始情报: {len(raw_news)} 字符")
-    
     final_report = analyze_with_deepseek(raw_news)
     send_dingtalk(final_report)
