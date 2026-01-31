@@ -14,11 +14,16 @@ LLM_BASE_URL = os.getenv("LLM_BASE_URL", "https://api.deepseek.com")
 LLM_MODEL_NAME = os.getenv("LLM_MODEL_NAME", "deepseek-chat")
 
 # 搜索关键词（针对墨西哥市场）
+import datetime
+
+# 动态获取当前年份，确保永远不过期
+current_year = datetime.date.today().year
+
 SEARCH_KEYWORDS = [
-    "Nu Mexico features update 2025",
-    "Stori Mexico credit card news",
-    "RappiCard Mexico latest updates",
-    "CNBV Mexico fintech regulation 2025"
+    f"Nu Mexico new features {current_year}",
+    f"Stori Mexico credit card latest news {current_year}",
+    f"RappiCard Mexico updates {current_year}",
+    f"CNBV Mexico regulation fintech {current_year}"
 ]
 
 def search_web():
@@ -33,7 +38,9 @@ def search_web():
                 print(f"   -> 搜索: {keyword}")
                 try:
                     # backend="html" 是关键，专治 IP 被墙
-                    keywords_results = list(ddgs.text(keyword, max_results=2, backend="html"))
+                    # timelimit="w" 代表限制在过去一周 (Week)
+# backend="html" 是为了防止被封 IP
+keywords_results = list(ddgs.text(keyword, max_results=3, backend="html", timelimit="w"))
                     
                     if not keywords_results:
                         print(f"      ⚠️ 关键词 '{keyword}' 未返回结果 (可能是反爬虫)")
