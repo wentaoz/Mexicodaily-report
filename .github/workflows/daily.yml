@@ -1,0 +1,32 @@
+name: DeepSeek Fintech Bot
+
+on:
+  schedule:
+    # 北京时间 每天 09:00 (UTC 01:00)
+    - cron: '0 1 * * *'
+  workflow_dispatch: # 手动触发按钮
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install dependencies
+        # 安装必要的库
+        run: pip install requests duckduckgo-search openai
+
+      - name: Run Script
+        env:
+          # 这里只需要传入两个最核心的 Key
+          DINGTALK_WEBHOOK: ${{ secrets.DINGTALK_WEBHOOK }}
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+          # LLM_BASE_URL 和 LLM_MODEL_NAME 已经在代码里默认写死为 DeepSeek 了
+          # 所以这里不传也可以，代码会自动用 DeepSeek
+        run: python daily_fintech_bot.py
